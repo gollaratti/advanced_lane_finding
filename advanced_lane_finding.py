@@ -1,8 +1,19 @@
 # -*- coding: utf-8 -*-
 """
+
+v2.0 - 23-Feb-2017
+Changes:
+(1) In perspective_transformation(): Corrected persective transformation source and destination points.
+(2) In edge_detect(): Corrected color conversion.
+(3) In  detect_lanes() and  opt_detect_lanes(): Corrected calculation of radii of curvature and vehicle offset.
+(4) In class Line(): set the lane curve fit averaging to 3.
+(5) In process_video_frame(image): added color conversion and improved the logic for calling etect_lanes() and  opt_detect_lanes()
+
+
 Created on Wed Feb 15 18:30:51 2017
 
 Advanced Lane Finding v1.0
+
 """
 ##############################################################################
 ### INCLUDES
@@ -126,7 +137,7 @@ def dir_threshold(gray, sobel_kernel=3, thresh=(0, np.pi/2)):
 def edge_detect(undist_image):
     gray = cv2.cvtColor(undist_image, cv2.COLOR_BGR2GRAY)
     mag_binary = mag_thresh(gray, sobel_kernel=9, mag_thresh=(75, 255))
-    hls = cv2.cvtColor(undist_image, cv2.COLOR_RGB2HLS)
+    hls = cv2.cvtColor(undist_image, cv2.COLOR_BGR2HLS)
     S = hls[:,:,2]
     
     thresh = (175, 255)
@@ -156,9 +167,9 @@ else:
 
 def perspective_transformation():
     #define source image points 
-    src = np.array([[490, 482],[810, 482],[1250, 720],[40, 720]], dtype=np.int32)
+    src = np.array([[215,700], [1080,700], [735,480],[550,480]], np.int32)
     #define destination image points for bird's eye view
-    dst = np.array([[0, 0], [1280, 0],[1250, 720],[40, 720]], dtype=np.int32)  
+    dst = np.array([[360,720], [960,720], [960,0], [360,0 ]], np.int32)  
     
     M = cv2.getPerspectiveTransform(np.float32(src),np.float32(dst))
     Minv = cv2.getPerspectiveTransform(np.float32(dst), np.float32(src))
@@ -281,8 +292,8 @@ def detect_lanes(binary_warped, visualize = True):
     right_curverad = ((1 + (2*right_fit[0]*y_eval + right_fit[1])**2)**1.5) / np.absolute(2*right_fit[0])
     
     # Define conversions in x and y from pixels space to meters
-    ym_per_pix = 30/720 # meters per pixel in y dimension
-    xm_per_pix = 3.7/700 # meters per pixel in x dimension
+    ym_per_pix = 60/720 # meters per pixel in y dimension
+    xm_per_pix = 3.7/600 # meters per pixel in x dimension
     
     # Fit new polynomials to x,y in world space
     left_fit_cr = np.polyfit(lefty*ym_per_pix, leftx*xm_per_pix, 2)
@@ -374,8 +385,8 @@ def opt_detect_lanes(binary_warped, left_fit, right_fit, visualize=True):
     right_curverad = ((1 + (2*right_fit[0]*y_eval + right_fit[1])**2)**1.5) / np.absolute(2*right_fit[0])
     
     # Define conversions in x and y from pixels space to meters
-    ym_per_pix = 30/720 # meters per pixel in y dimension
-    xm_per_pix = 3.7/700 # meters per pixel in x dimension
+    ym_per_pix = 60/720 # meters per pixel in y dimension
+    xm_per_pix = 3.7/600 # meters per pixel in x dimension
     
     # Fit new polynomials to x,y in world space
     left_fit_cr = np.polyfit(lefty*ym_per_pix, leftx*xm_per_pix, 2)
@@ -468,8 +479,8 @@ class Line():
         self.B.append(fit_coeffs[1])
         self.C.append(fit_coeffs[2])
         
-        # pop out the oldest co-efficients and average them over 5 frames
-        if(len(self.A) >=3):
+        # pop out the oldest co-efficients and average them over 3 frames
+        if(len(self.A) >=2):
             _ = self.A.pop(0)
             _ = self.B.pop(0)
             _ = self.C.pop(0)
@@ -500,6 +511,8 @@ def process_video_frame(image):
     
     global mtx, dist, left_lane, right_lane, lane_detect, new_fit, reuse_fit
     
+    image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+    
     #undistort the image
     dst = cv2.undistort(image, mtx, dist, None, mtx)
     
@@ -513,7 +526,7 @@ def process_video_frame(image):
         #detect lanes with window searching
         left_fit, right_fit, left_curverad, right_curverad, vehicle_offset = detect_lanes(binary_warped, visualize=False)
         
-        if (right_fit == None):
+        if ((right_fit == None) or (left_fit == None)):
             left_fit = left_lane.get_average_fit()
             right_fit = right_lane.get_average_fit()
             rc, vehicle_offset = left_lane.get_params()
@@ -532,10 +545,10 @@ def process_video_frame(image):
         right_fit = right_lane.get_average_fit()
         
         left_fit, right_fit, left_curverad, right_curverad, vehicle_offset = opt_detect_lanes(binary_warped, left_fit, right_fit, visualize=False)
-        if left_fit is None:
+        if ((right_fit == None) or (left_fit == None)):
             #detect lanes with window searching
             left_fit, right_fit, left_curverad, right_curverad, vehicle_offset = detect_lanes(binary_warped, visualize=False)
-            if (right_fit == None):
+            if ((right_fit == None) or (left_fit == None)):
                 left_fit = left_lane.get_average_fit()
                 right_fit = right_lane.get_average_fit()
                 rc, vehicle_offset = left_lane.get_params()
@@ -555,6 +568,7 @@ def process_video_frame(image):
     
     #draw lanes on the image
     result = draw_lanes_on_road(binary_warped, left_fit, right_fit, rc, vehicle_offset, dst)
+    result = cv2.cvtColor(result, cv2.COLOR_BGR2RGB)
    
     return result
 
